@@ -491,12 +491,15 @@
     document.getElementById('presetMaxHangs'),
   ];
 
+  const PREFS_KEY = 'fingerboard-timer-prefs';
+
   function applyPreset(values) {
     cfgSets.value = values.sets;
     cfgReps.value = values.reps;
     cfgRepTime.value = values.repTime;
     cfgRestRep.value = values.restRep;
     cfgRestSet.value = values.restSet;
+    savePrefs();
   }
   document.getElementById('presetRepeaters').addEventListener('click', () => {
     applyPreset({ sets: 4, reps: 6, repTime: 7, restRep: 3, restSet: 180 });
@@ -509,19 +512,61 @@
   tickToggle.addEventListener('click', () => {
     tickEnabled = !tickEnabled;
     tickToggle.classList.toggle('on', tickEnabled);
+    savePrefs();
   });
 
   let soundEnabled = true;
   soundToggle.addEventListener('click', () => {
     soundEnabled = !soundEnabled;
     soundToggle.classList.toggle('on', soundEnabled);
+    savePrefs();
   });
 
+  // Remember the last-used numbers and sound switches, so the app opens ready
+  // to go rather than back at the defaults every time.
+  function savePrefs() {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({
+        sets: cfgSets.value, reps: cfgReps.value, repTime: cfgRepTime.value,
+        restRep: cfgRestRep.value, restSet: cfgRestSet.value,
+        tickEnabled, soundEnabled,
+      }));
+    } catch (e) {}
+  }
+  function loadPrefs() {
+    let p;
+    try {
+      const raw = localStorage.getItem(PREFS_KEY);
+      if (!raw) return;
+      p = JSON.parse(raw);
+    } catch (e) { return; }
+    if (!p || typeof p !== 'object') return;
+    const set = (el, v) => { if (v !== undefined && v !== null && v !== '') el.value = v; };
+    set(cfgSets, p.sets); set(cfgReps, p.reps); set(cfgRepTime, p.repTime);
+    set(cfgRestRep, p.restRep); set(cfgRestSet, p.restSet);
+    if (typeof p.tickEnabled === 'boolean') {
+      tickEnabled = p.tickEnabled;
+      tickToggle.classList.toggle('on', tickEnabled);
+    }
+    if (typeof p.soundEnabled === 'boolean') {
+      soundEnabled = p.soundEnabled;
+      soundToggle.classList.toggle('on', soundEnabled);
+    }
+  }
+
   const themeToggle = document.getElementById('themeToggle');
-  themeToggle.addEventListener('click', () => {
-    const isLight = document.body.classList.toggle('light-theme');
+  const THEME_KEY = 'fingerboard-timer-theme';
+
+  function applyTheme(isLight) {
+    document.body.classList.toggle('light-theme', isLight);
     themeToggle.textContent = isLight ? '☀' : '☾';
+  }
+  themeToggle.addEventListener('click', () => {
+    const isLight = !document.body.classList.contains('light-theme');
+    applyTheme(isLight);
+    try { localStorage.setItem(THEME_KEY, isLight ? 'light' : 'dark'); } catch (e) {}
   });
+  try { applyTheme(localStorage.getItem(THEME_KEY) === 'light'); } catch (e) {}
 
   const configEl = document.querySelector('.config');
   const configToggle = document.getElementById('configToggle');
@@ -539,7 +584,13 @@
       const cur = parseInt(target.value, 10) || 0;
       const next = Math.min(max, Math.max(min, cur + step));
       target.value = next;
+      savePrefs();
     });
+  });
+
+  // Typed-in edits should stick too, not just stepper taps.
+  configInputs.forEach((input) => {
+    input.addEventListener('change', savePrefs);
   });
 
   // ---- Audio (generated, no external files) ----
@@ -548,6 +599,13 @@
     if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === 'suspended') actx.resume();
   }
+  // Browsers block audio until the page has seen a user gesture. Start/Resume call
+  // ensureAudio() directly, but a session restored after a reload starts ticking
+  // without any tap — so arm the audio on the first interaction of any kind,
+  // otherwise a restored session would count down completely silently.
+  ['pointerdown', 'keydown'].forEach((evt) => {
+    document.addEventListener(evt, ensureAudio, { once: true });
+  });
   function beep(freq, duration, gain, type) {
     if (!actx) return;
     const osc = actx.createOscillator();
@@ -607,9 +665,19 @@
   let curSet = 1, curRep = 1;
   let secondsLeft = 0;
   let phaseTotal = 0;
+  // phaseStartedAt is the IDEAL wall-clock instant the current phase began — chained
+  // continuously from session start (each new phase's anchor = previous anchor + previous
+  // duration), never just "whenever the code happened to run." That means the remaining
+  // time is always correct from Date.now() alone, however long a gap (a throttled timer,
+  // a backgrounded tab, or the browser fully discarding and reloading the page) turns out
+  // to be — there's no separate "catch-up" logic to keep in sync, just one formula.
+  let phaseStartedAt = 0;
+  let pausedRemainingMs = 0; // remaining ms in the phase, captured at pause time
   let intervalId = null;
+  let suppressSound = false; // true while silently fast-forwarding through elapsed phases on restore
 
   const READY_SECONDS = 10;
+  const STORAGE_KEY = 'fingerboard-timer-session-v1';
 
   function readConfig() {
     return {
@@ -657,45 +725,70 @@
     timerNum.textContent = phase === 'done' ? '✓' : (phase === 'idle' ? '–' : secondsLeft);
     setNow.textContent = plan ? curSet : '–';
     repNow.textContent = plan ? curRep : '–';
+    saveState();
   }
 
-  function startPhase(newPhase, seconds) {
+  // newPhase's anchor chains from the phase it replaces — pass the previous phase's
+  // (phaseStartedAt + phaseTotal) as `anchor` for a transition, or omit it for a
+  // brand-new session (anchor defaults to right now).
+  function startPhase(newPhase, seconds, anchor) {
     phase = newPhase;
     secondsLeft = seconds;
     phaseTotal = seconds;
+    phaseStartedAt = anchor !== undefined ? anchor : Date.now();
     render();
   }
 
-  function tickSecond() {
-    secondsLeft -= 1;
-    if (secondsLeft > 0) {
-      if ((phase === 'hang' || phase === 'rest') && secondsLeft <= 3) playTick();
-      else if (phase === 'restset' && secondsLeft <= 10) playTick();
-      else if (phase === 'ready' && secondsLeft <= 3) playTick();
-      render();
+  // Real remaining seconds in the current phase, from the wall clock — correct
+  // however long it's been since we last checked, including a negative value if
+  // whole phases have elapsed unnoticed (backgrounded tab, reload, etc).
+  function computeSecondsLeft() {
+    return phaseTotal - Math.floor((Date.now() - phaseStartedAt) / 1000);
+  }
+
+  function checkTimer() {
+    if (!running) return;
+    let remaining = computeSecondsLeft();
+    if (remaining > 0) {
+      if (remaining !== secondsLeft) {
+        secondsLeft = remaining;
+        if ((phase === 'hang' || phase === 'rest') && secondsLeft <= 3) playTick();
+        else if (phase === 'restset' && secondsLeft <= 10) playTick();
+        else if (phase === 'ready' && secondsLeft <= 3) playTick();
+        render();
+      }
       return;
     }
-    // phase boundary reached
-    advancePhase();
+    // One or more phase boundaries have passed — each advancePhase() call chains
+    // its anchor from the last, so this always lands in exactly the right spot.
+    let guard = plan ? plan.sets * plan.reps * 2 + 10 : 100;
+    while (running && phase !== 'done' && computeSecondsLeft() <= 0 && guard-- > 0) {
+      advancePhase();
+    }
+    if (running && phase !== 'done') {
+      secondsLeft = computeSecondsLeft();
+      render();
+    }
   }
 
   function advancePhase() {
+    const nextAnchor = phaseStartedAt + phaseTotal * 1000;
     if (phase === 'ready') {
-      playRepStart();
-      startPhase('hang', plan.repTime);
+      if (!suppressSound) playRepStart();
+      startPhase('hang', plan.repTime, nextAnchor);
       statusText.textContent = 'Training…';
       return;
     }
     if (phase === 'hang') {
-      playRepEnd();
+      if (!suppressSound) playRepEnd();
       const isLastRepOfSet = curRep >= plan.reps;
       if (!isLastRepOfSet) {
         curRep += 1;
         if (plan.restRep > 0) {
-          startPhase('rest', plan.restRep);
+          startPhase('rest', plan.restRep, nextAnchor);
         } else {
-          playRepStart();
-          startPhase('hang', plan.repTime);
+          if (!suppressSound) playRepStart();
+          startPhase('hang', plan.repTime, nextAnchor);
         }
       } else {
         const isLastSet = curSet >= plan.sets;
@@ -705,11 +798,11 @@
           curSet += 1;
           curRep = 1;
           if (plan.restSet > 0) {
-            startPhase('restset', plan.restSet);
-            playSetDone();
+            startPhase('restset', plan.restSet, nextAnchor);
+            if (!suppressSound) playSetDone();
           } else {
-            playRepStart();
-            startPhase('hang', plan.repTime);
+            if (!suppressSound) playRepStart();
+            startPhase('hang', plan.repTime, nextAnchor);
           }
         }
       }
@@ -717,14 +810,14 @@
       return;
     }
     if (phase === 'rest') {
-      playRepStart();
-      startPhase('hang', plan.repTime);
+      if (!suppressSound) playRepStart();
+      startPhase('hang', plan.repTime, nextAnchor);
       render();
       return;
     }
     if (phase === 'restset') {
-      playRepStart();
-      startPhase('hang', plan.repTime);
+      if (!suppressSound) playRepStart();
+      startPhase('hang', plan.repTime, nextAnchor);
       render();
       return;
     }
@@ -738,11 +831,12 @@
     phase = 'done';
     secondsLeft = 0;
     phaseTotal = 0;
-    playAllDone();
+    if (!suppressSound) playAllDone();
     render();
     statusText.textContent = 'Nice work';
     startBtn.textContent = 'Start';
     releaseWakeLock();
+    clearSavedState();
   }
 
   function setConfigCollapsed(collapsed) {
@@ -765,25 +859,32 @@
     startBtn.textContent = 'Pause';
     requestWakeLock();
     startPhase('ready', READY_SECONDS);
-    intervalId = setInterval(tickSecond, 1000);
+    intervalId = setInterval(checkTimer, 250);
   }
 
   function pauseSession() {
     clearInterval(intervalId);
     intervalId = null;
     running = false;
+    // Freeze the remaining time; phaseStartedAt gets rebased on resume so the
+    // paused interval doesn't count against the phase.
+    pausedRemainingMs = Math.max(0, phaseTotal * 1000 - (Date.now() - phaseStartedAt));
     startBtn.textContent = 'Resume';
     statusText.textContent = 'Paused';
     releaseWakeLock();
+    saveState();
   }
 
   function resumeSession() {
     ensureAudio();
     running = true;
+    phaseStartedAt = Date.now() - (phaseTotal * 1000 - pausedRemainingMs);
+    secondsLeft = computeSecondsLeft();
     startBtn.textContent = 'Pause';
     statusText.textContent = phase === 'ready' ? 'Get ready…' : 'Training…';
     requestWakeLock();
-    intervalId = setInterval(tickSecond, 1000);
+    intervalId = setInterval(checkTimer, 250);
+    render();
   }
 
   function resetSession() {
@@ -802,6 +903,107 @@
     plan = null;
     updateStaticDisplay();
     render();
+    clearSavedState();
+  }
+
+  // ---- Persistence: survive backgrounding, tab discard, or a full reload ----
+  // Just the plan, position, and the ideal wall-clock anchor are stored — real
+  // elapsed time is always recomputed from Date.now(), so any length of gap is
+  // handled the same way, whether it's a throttled timer or the OS killing the tab.
+  function saveState() {
+    try {
+      if (!sessionActive) {
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        plan, curSet, curRep, phase, phaseTotal, phaseStartedAt,
+        running, pausedRemainingMs,
+      }));
+    } catch (e) { /* storage unavailable — app still works, just won't survive a reload */ }
+  }
+  function clearSavedState() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  }
+
+  // Guards against corrupted or hand-edited localStorage. A plan with a zero or
+  // NaN repTime would make the catch-up loop below spin forever, so validate the
+  // shape before trusting any of it.
+  function isValidSavedState(s) {
+    if (!s || typeof s !== 'object' || !s.plan) return false;
+    const p = s.plan;
+    const posInt = (v) => Number.isFinite(v) && v > 0;
+    const nonNegInt = (v) => Number.isFinite(v) && v >= 0;
+    if (!posInt(p.sets) || !posInt(p.reps) || !posInt(p.repTime)) return false;
+    if (!nonNegInt(p.restRep) || !nonNegInt(p.restSet)) return false;
+    if (!['ready', 'hang', 'rest', 'restset'].includes(s.phase)) return false;
+    if (!posInt(s.curSet) || !posInt(s.curRep)) return false;
+    if (s.curSet > p.sets || s.curRep > p.reps) return false;
+    if (!nonNegInt(s.phaseTotal) || !Number.isFinite(s.phaseStartedAt)) return false;
+    return true;
+  }
+
+  function restoreState() {
+    let saved;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      saved = JSON.parse(raw);
+    } catch (e) { return; }
+    if (!isValidSavedState(saved)) { clearSavedState(); return; }
+
+    plan = saved.plan;
+    curSet = saved.curSet;
+    curRep = saved.curRep;
+    phase = saved.phase;
+    phaseTotal = saved.phaseTotal;
+    updateStaticDisplay();
+    setConfigDisabled(true);
+    setConfigCollapsed(true);
+    sessionActive = true;
+
+    if (!saved.running) {
+      // Was paused — nothing elapsed, restore exactly as left.
+      pausedRemainingMs = saved.pausedRemainingMs;
+      phaseStartedAt = Date.now() - (phaseTotal * 1000 - pausedRemainingMs);
+      secondsLeft = computeSecondsLeft();
+      running = false;
+      startBtn.textContent = 'Resume';
+      statusText.textContent = 'Paused';
+      render();
+      return;
+    }
+
+    // Was running — the anchor is the ideal wall-clock start time, so however much
+    // time passed (even across a reload) just falls out of computeSecondsLeft();
+    // fast-forward silently through any fully-elapsed phases the same way live
+    // ticking would, just without the sound bombarding on page open.
+    phaseStartedAt = saved.phaseStartedAt;
+    running = true;
+    suppressSound = true;
+    // Bounded: a full session is at most sets*reps*2 phases, so this can never
+    // run away even if the saved plan somehow slipped past validation.
+    let guard = plan.sets * plan.reps * 2 + 10;
+    while (phase !== 'done' && computeSecondsLeft() <= 0 && guard-- > 0) {
+      advancePhase();
+    }
+    suppressSound = false;
+
+    if (phase === 'done') {
+      // Session finished while we were away — finishSession() already ran silently
+      // inside the loop, but the config was locked/collapsed above on the assumption
+      // the session was still live. Hand control back so settings are editable again.
+      setConfigDisabled(false);
+      setConfigCollapsed(false);
+      return;
+    }
+
+    secondsLeft = computeSecondsLeft();
+    startBtn.textContent = 'Pause';
+    statusText.textContent = phase === 'ready' ? 'Get ready…' : 'Training…';
+    requestWakeLock();
+    intervalId = setInterval(checkTimer, 250);
+    render();
   }
 
   startBtn.addEventListener('click', () => {
@@ -819,10 +1021,15 @@
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && running) requestWakeLock();
+    if (document.visibilityState === 'visible') {
+      if (running) requestWakeLock();
+      checkTimer(); // recompute immediately on return, rather than waiting for the next poll
+    }
   });
 
   // initial paint
+  loadPrefs();
+  restoreState();
   render();
 })();
 
