@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fingerboard Timer</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#17130E">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  @font-face {
+    font-family: 'Oswald';
+    src: local('Oswald');
+  }
+  :root {
+    --bg: #17130E;
+    --surface: #221B13;
+    --surface-2: #2B2318;
+    --chalk: #EAE2D0;
+    --chalk-dim: #A69B87;
+    --hang: #B8451E;
+    --hang-dim: #5C2C18;
+    --rest: #4C7072;
+    --rest-dim: #28393A;
+    --restset: #8A7A4E;
+    --restset-dim: #3D3623;
+    --ready: #D4A72C;
+    --line: #3A3024;
+  }
+  body.light-theme {
+    --bg: #F2EBDA;
+    --surface: #E7DFC8;
+    --surface-2: #DCD2B4;
+    --chalk: #2B2116;
+    --chalk-dim: #7A6F58;
+    --hang: #A63D19;
+    --hang-dim: #E7C3AE;
+    --rest: #386163;
+    --rest-dim: #C4D6D6;
+    --restset: #6E6138;
+    --restset-dim: #DED6BB;
+    --ready: #9C7A16;
+    --line: #CFC4A4;
+  }
+  body.light-theme .state-label.hang,
+  body.light-theme .state-label.rest,
+  body.light-theme .state-label.restset,
+  body.light-theme .state-label.ready {
+    color: #F2EBDA;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg);
+    color: var(--chalk);
+    font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+    overscroll-behavior: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 18px 20px 24px;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  h1 {
+    font-family: 'Oswald', 'Arial Narrow', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 19px;
+    margin: 0;
+    color: var(--chalk);
+  }
+  .subtitle {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--chalk-dim);
+    letter-spacing: 0.03em;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .theme-btn {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--chalk);
+    border: 1px solid var(--line);
+    font-size: 14px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .theme-btn:active { transform: scale(0.92); }
+
+  /* HERO */
+  .hero {
+    margin-top: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    transition: margin-top 0.22s ease;
+  }
+  body.setup-collapsed .hero { margin-top: 72px; }
+  body:not(.setup-collapsed) .hero { margin-top: 18px; }
+  .state-label {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-size: 15px;
+    padding: 5px 16px;
+    border-radius: 3px;
+    transition: background-color 0.25s ease, color 0.25s ease, font-size 0.22s ease;
+    background: var(--surface-2);
+    color: var(--chalk-dim);
+  }
+  body.setup-collapsed .state-label { font-size: 23px; padding: 8px 20px; }
+  .state-label.hang { background: var(--hang); color: #1a0d06; }
+  .state-label.rest { background: var(--rest); color: #0a1616; }
+  .state-label.restset { background: var(--restset); color: #1a1608; }
+  .state-label.ready { background: var(--ready); color: #241a02; }
+
+  .timer-num {
+    font-family: 'Oswald', 'Arial Narrow', sans-serif;
+    font-weight: 600;
+    font-size: 25vw;
+    line-height: 0.9;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.25s ease, font-size 0.22s ease;
+  }
+  @media (min-width: 480px) { .timer-num { font-size: 120px; } }
+  body.setup-collapsed .timer-num { font-size: 38vw; }
+  @media (min-width: 480px) { body.setup-collapsed .timer-num { font-size: 190px; } }
+  .timer-num.hang { color: var(--hang); }
+  .timer-num.rest { color: var(--rest); }
+  .timer-num.restset { color: var(--restset); }
+  .timer-num.ready { color: var(--ready); }
+  .timer-num.idle { color: var(--chalk-dim); }
+
+  .progress-row {
+    display: flex;
+    justify-content: center;
+    gap: 22px;
+    margin-top: 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--chalk-dim);
+    letter-spacing: 0.04em;
+  }
+  .progress-row b { color: var(--chalk); font-weight: 600; }
+
+  /* CONTROLS */
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-top: 22px;
+  }
+  button {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 15px;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 0;
+    flex: 1;
+    cursor: pointer;
+    color: var(--bg);
+    background: var(--chalk);
+    transition: transform 0.08s ease, opacity 0.15s ease, padding 0.22s ease, font-size 0.22s ease;
+  }
+  body.setup-collapsed .controls button {
+    font-size: 19px;
+    padding: 20px 0;
+    border-radius: 10px;
+  }
+  button:active { transform: scale(0.97); }
+  button.secondary {
+    background: transparent;
+    color: var(--chalk-dim);
+    border: 1px solid var(--line);
+  }
+  button:focus-visible { outline: 2px solid var(--ready); outline-offset: 2px; }
+  button:disabled { opacity: 0.4; }
+
+  /* CONFIG */
+  .config {
+    margin-top: 26px;
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+  }
+  .config-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: transparent;
+    border: none;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--chalk-dim);
+    padding: 4px 0;
+    margin-bottom: 4px;
+    cursor: pointer;
+  }
+  .chevron {
+    font-size: 13px;
+    transition: transform 0.2s ease;
+  }
+  .config-title[aria-expanded="false"] .chevron,
+  .config-title[aria-expanded="false"] #configChevron {
+    transform: rotate(-90deg);
+  }
+  .config-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.22s ease;
+  }
+  .config-body-inner { overflow: hidden; min-height: 0; }
+  .config.collapsed .config-body {
+    grid-template-rows: 0fr;
+  }
+  .preset-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .preset-btn {
+    flex: 1;
+    background: var(--surface);
+    color: var(--chalk-dim);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 0;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .preset-btn:active { transform: scale(0.97); }
+  .preset-btn:disabled { opacity: 0.35; }
+  .field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .field {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: var(--chalk-dim);
+    letter-spacing: 0.03em;
+    margin-bottom: 3px;
+  }
+  .field input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--chalk);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 0;
+    text-align: center;
+    -moz-appearance: textfield;
+  }
+  .field input::-webkit-outer-spin-button,
+  .field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .field input:focus { outline: none; }
+  .field input:focus-visible { outline: 2px solid var(--ready); outline-offset: 2px; border-radius: 3px; }
+  .field-unit {
+    font-size: 10px;
+    color: var(--chalk-dim);
+    margin-left: 4px;
+  }
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .stepper input { flex: 1; min-width: 0; }
+  .stepper button {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 5px;
+    background: var(--surface-2);
+    color: var(--chalk);
+    border: 1px solid var(--line);
+    font-family: 'Oswald', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .stepper button:active { transform: scale(0.94); background: var(--surface); }
+  .stepper button:disabled { opacity: 0.35; }
+
+  .sound-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--chalk-dim);
+  }
+  .toggle {
+    position: relative;
+    width: 40px; height: 22px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    cursor: pointer;
+  }
+  .toggle .knob {
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--chalk-dim);
+    transition: left 0.15s ease, background-color 0.15s ease;
+  }
+  .toggle.on .knob { left: 20px; background: var(--hang); }
+
+  footer {
+    text-align: center;
+    font-size: 10px;
+    color: var(--line);
+    margin-top: 20px;
+    letter-spacing: 0.05em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .timer-num, .state-label { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fingerboard</h1>
+    <div class="header-right">
+      <div class="subtitle" id="statusText">Ready to set up</div>
+      <button type="button" class="theme-btn" id="themeToggle" aria-label="Toggle light/dark theme">☾</button>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="state-label idle" id="stateLabel">READY</div>
+    <div class="timer-num idle" id="timerNum">–</div>
+    <div class="progress-row">
+      <div>SET <b id="setNow">–</b>/<span id="setTotal">–</span></div>
+      <div>REP <b id="repNow">–</b>/<span id="repTotal">–</span></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="startBtn">Start</button>
+    <button id="resetBtn" class="secondary">Reset</button>
+  </div>
+
+  <div class="config">
+    <button type="button" class="config-title" id="configToggle" aria-expanded="true">
+      <span>Session setup</span>
+      <span class="chevron" id="configChevron">▾</span>
+    </button>
+    <div class="config-body" id="configBody">
+      <div class="config-body-inner">      <div class="preset-row">
+        <button type="button" class="preset-btn" id="presetRepeaters">Repeaters</button>
+        <button type="button" class="preset-btn" id="presetMaxHangs">Max hangs</button>
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label>Sets</label>
+          <div class="stepper">
+            <button type="button" data-step="-1" data-target="cfgSets" aria-label="Decrease sets">−</button>
+            <input type="number" id="cfgSets" value="4" min="1" max="20" inputmode="numeric">
+            <button type="button" data-step="1" data-target="cfgSets" aria-label="Increase sets">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Reps per set</label>
+          <div class="stepper">
+            <button type="button" data-step="-1" data-target="cfgReps" aria-label="Decrease reps">−</button>
+            <input type="number" id="cfgReps" value="6" min="1" max="30" inputmode="numeric">
+            <button type="button" data-step="1" data-target="cfgReps" aria-label="Increase reps">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Rep time <span class="field-unit">sec</span></label>
+          <div class="stepper">
+            <button type="button" data-step="-1" data-target="cfgRepTime" aria-label="Decrease rep time">−</button>
+            <input type="number" id="cfgRepTime" value="7" min="1" max="120" inputmode="numeric">
+            <button type="button" data-step="1" data-target="cfgRepTime" aria-label="Increase rep time">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Rest between reps <span class="field-unit">sec</span></label>
+          <div class="stepper">
+            <button type="button" data-step="-1" data-target="cfgRestRep" aria-label="Decrease rest between reps">−</button>
+            <input type="number" id="cfgRestRep" value="3" min="0" max="300" inputmode="numeric">
+            <button type="button" data-step="1" data-target="cfgRestRep" aria-label="Increase rest between reps">+</button>
+          </div>
+        </div>
+        <div class="field" style="grid-column: 1 / -1;">
+          <label>Rest between sets <span class="field-unit">sec</span></label>
+          <div class="stepper">
+            <button type="button" data-step="-5" data-target="cfgRestSet" aria-label="Decrease rest between sets">−</button>
+            <input type="number" id="cfgRestSet" value="180" min="0" max="1800" inputmode="numeric">
+            <button type="button" data-step="5" data-target="cfgRestSet" aria-label="Increase rest between sets">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="sound-row">
+        <span>Sound</span>
+        <div class="toggle on" id="soundToggle"><div class="knob"></div></div>
+      </div>
+      <div class="sound-row">
+        <span>Tick</span>
+        <div class="toggle on" id="tickToggle"><div class="knob"></div></div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Keep screen awake while training · works offline</footer>
+</div>
+
+<script>
+(function() {
+  // ---- Elements ----
+  const stateLabel = document.getElementById('stateLabel');
+  const timerNum = document.getElementById('timerNum');
+  const setNow = document.getElementById('setNow');
+  const setTotal = document.getElementById('setTotal');
+  const repNow = document.getElementById('repNow');
+  const repTotal = document.getElementById('repTotal');
+  const startBtn = document.getElementById('startBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const statusText = document.getElementById('statusText');
+  const tickToggle = document.getElementById('tickToggle');
+  const soundToggle = document.getElementById('soundToggle');
+
+  const cfgSets = document.getElementById('cfgSets');
+  const cfgReps = document.getElementById('cfgReps');
+  const cfgRepTime = document.getElementById('cfgRepTime');
+  const cfgRestRep = document.getElementById('cfgRestRep');
+  const cfgRestSet = document.getElementById('cfgRestSet');
+  const configInputs = [cfgSets, cfgReps, cfgRepTime, cfgRestRep, cfgRestSet];
+  const presetButtons = [
+    document.getElementById('presetRepeaters'),
+    document.getElementById('presetMaxHangs'),
+  ];
+
+  function applyPreset(values) {
+    cfgSets.value = values.sets;
+    cfgReps.value = values.reps;
+    cfgRepTime.value = values.repTime;
+    cfgRestRep.value = values.restRep;
+    cfgRestSet.value = values.restSet;
+  }
+  document.getElementById('presetRepeaters').addEventListener('click', () => {
+    applyPreset({ sets: 4, reps: 6, repTime: 7, restRep: 3, restSet: 180 });
+  });
+  document.getElementById('presetMaxHangs').addEventListener('click', () => {
+    applyPreset({ sets: 5, reps: 1, repTime: 10, restRep: 0, restSet: 180 });
+  });
+
+  let tickEnabled = true;
+  tickToggle.addEventListener('click', () => {
+    tickEnabled = !tickEnabled;
+    tickToggle.classList.toggle('on', tickEnabled);
+  });
+
+  let soundEnabled = true;
+  soundToggle.addEventListener('click', () => {
+    soundEnabled = !soundEnabled;
+    soundToggle.classList.toggle('on', soundEnabled);
+  });
+
+  const themeToggle = document.getElementById('themeToggle');
+  themeToggle.addEventListener('click', () => {
+    const isLight = document.body.classList.toggle('light-theme');
+    themeToggle.textContent = isLight ? '☀' : '☾';
+  });
+
+  const configEl = document.querySelector('.config');
+  const configToggle = document.getElementById('configToggle');
+  configToggle.addEventListener('click', () => {
+    setConfigCollapsed(!configEl.classList.contains('collapsed'));
+  });
+
+  document.querySelectorAll('.stepper button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.target);
+      if (!target || target.disabled) return;
+      const step = parseInt(btn.dataset.step, 10);
+      const min = parseInt(target.min, 10);
+      const max = parseInt(target.max, 10);
+      const cur = parseInt(target.value, 10) || 0;
+      const next = Math.min(max, Math.max(min, cur + step));
+      target.value = next;
+    });
+  });
+
+  // ---- Audio (generated, no external files) ----
+  let actx = null;
+  function ensureAudio() {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+  }
+  function beep(freq, duration, gain, type) {
+    if (!actx) return;
+    const osc = actx.createOscillator();
+    const g = actx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    g.gain.value = 0;
+    osc.connect(g);
+    g.connect(actx.destination);
+    const now = actx.currentTime;
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(gain, now + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    osc.start(now);
+    osc.stop(now + duration + 0.02);
+  }
+
+  function playTick() {
+    if (!tickEnabled || !soundEnabled) return;
+    beep(1600, 0.045, 0.14, 'square');
+  }
+  function playRepStart() {
+    if (!soundEnabled) return;
+    beep(880, 0.6, 0.32, 'sine');
+  }
+  function playRepEnd() {
+    if (!soundEnabled) return;
+    beep(440, 0.6, 0.32, 'sine');
+  }
+  function playSetDone() {
+    if (!soundEnabled) return;
+    beep(660, 0.9, 0.32, 'sine');
+  }
+  function playAllDone() {
+    if (!soundEnabled) return;
+    beep(660, 0.35, 0.32, 'sine');
+    setTimeout(() => beep(880, 1.1, 0.32, 'sine'), 380);
+  }
+
+  // ---- Wake lock (best-effort; keeps screen on during a session where supported) ----
+  let wakeLock = null;
+  async function requestWakeLock() {
+    try {
+      if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+    } catch (e) { /* ignore — not fatal if unsupported or denied */ }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+
+  // ---- Session model ----
+  // Phases: ready -> hang -> rest (between reps) -> hang -> ... -> restset (between sets) -> ... -> done
+  let plan = null;      // { sets, reps, repTime, restRep, restSet }
+  let running = false;
+  let sessionActive = false; // true from first Start until Reset (paused sessions stay active)
+  let phase = 'idle';   // idle | ready | hang | rest | restset | done
+  let curSet = 1, curRep = 1;
+  let secondsLeft = 0;
+  let phaseTotal = 0;
+  let intervalId = null;
+
+  const READY_SECONDS = 10;
+
+  function readConfig() {
+    return {
+      sets: clampInt(cfgSets.value, 1, 20, 4),
+      reps: clampInt(cfgReps.value, 1, 30, 6),
+      repTime: clampInt(cfgRepTime.value, 1, 120, 7),
+      restRep: clampInt(cfgRestRep.value, 0, 300, 3),
+      restSet: clampInt(cfgRestSet.value, 0, 1800, 180),
+    };
+  }
+  function clampInt(v, min, max, fallback) {
+    const n = parseInt(v, 10);
+    if (isNaN(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+  }
+
+  function setConfigDisabled(disabled) {
+    configInputs.forEach(i => i.disabled = disabled);
+    presetButtons.forEach(b => { if (b) b.disabled = disabled; });
+  }
+
+  function updateStaticDisplay() {
+    setTotal.textContent = plan ? plan.sets : '–';
+    repTotal.textContent = plan ? plan.reps : '–';
+  }
+
+  function renderPhaseChrome() {
+    stateLabel.className = 'state-label';
+    timerNum.className = 'timer-num';
+    let label = 'READY';
+    let cls = 'ready';
+    if (phase === 'hang') { label = 'HANG'; cls = 'hang'; }
+    else if (phase === 'rest') { label = 'REST'; cls = 'rest'; }
+    else if (phase === 'restset') { label = 'REST — BETWEEN SETS'; cls = 'restset'; }
+    else if (phase === 'ready') { label = 'GET READY'; cls = 'ready'; }
+    else if (phase === 'done') { label = 'SESSION COMPLETE'; cls = 'hang'; }
+    else { label = 'READY'; cls = 'idle'; }
+    stateLabel.classList.add(cls === 'idle' ? 'idle' : cls);
+    timerNum.classList.add(cls === 'idle' ? 'idle' : cls);
+    stateLabel.textContent = label;
+  }
+
+  function render() {
+    renderPhaseChrome();
+    timerNum.textContent = phase === 'done' ? '✓' : (phase === 'idle' ? '–' : secondsLeft);
+    setNow.textContent = plan ? curSet : '–';
+    repNow.textContent = plan ? curRep : '–';
+  }
+
+  function startPhase(newPhase, seconds) {
+    phase = newPhase;
+    secondsLeft = seconds;
+    phaseTotal = seconds;
+    render();
+  }
+
+  function tickSecond() {
+    secondsLeft -= 1;
+    if (secondsLeft > 0) {
+      if ((phase === 'hang' || phase === 'rest') && secondsLeft <= 3) playTick();
+      else if (phase === 'restset' && secondsLeft <= 10) playTick();
+      else if (phase === 'ready' && secondsLeft <= 3) playTick();
+      render();
+      return;
+    }
+    // phase boundary reached
+    advancePhase();
+  }
+
+  function advancePhase() {
+    if (phase === 'ready') {
+      playRepStart();
+      startPhase('hang', plan.repTime);
+      statusText.textContent = 'Training…';
+      return;
+    }
+    if (phase === 'hang') {
+      playRepEnd();
+      const isLastRepOfSet = curRep >= plan.reps;
+      if (!isLastRepOfSet) {
+        curRep += 1;
+        if (plan.restRep > 0) {
+          startPhase('rest', plan.restRep);
+        } else {
+          playRepStart();
+          startPhase('hang', plan.repTime);
+        }
+      } else {
+        const isLastSet = curSet >= plan.sets;
+        if (isLastSet) {
+          finishSession();
+        } else {
+          curSet += 1;
+          curRep = 1;
+          if (plan.restSet > 0) {
+            startPhase('restset', plan.restSet);
+            playSetDone();
+          } else {
+            playRepStart();
+            startPhase('hang', plan.repTime);
+          }
+        }
+      }
+      render();
+      return;
+    }
+    if (phase === 'rest') {
+      playRepStart();
+      startPhase('hang', plan.repTime);
+      render();
+      return;
+    }
+    if (phase === 'restset') {
+      playRepStart();
+      startPhase('hang', plan.repTime);
+      render();
+      return;
+    }
+  }
+
+  function finishSession() {
+    clearInterval(intervalId);
+    intervalId = null;
+    running = false;
+    sessionActive = false;
+    phase = 'done';
+    secondsLeft = 0;
+    phaseTotal = 0;
+    playAllDone();
+    render();
+    statusText.textContent = 'Nice work';
+    startBtn.textContent = 'Start';
+    releaseWakeLock();
+  }
+
+  function setConfigCollapsed(collapsed) {
+    configEl.classList.toggle('collapsed', collapsed);
+    configToggle.setAttribute('aria-expanded', String(!collapsed));
+    document.body.classList.toggle('setup-collapsed', collapsed);
+  }
+
+  function startSession() {
+    ensureAudio();
+    plan = readConfig();
+    setConfigDisabled(true);
+    setConfigCollapsed(true);
+    updateStaticDisplay();
+    curSet = 1;
+    curRep = 1;
+    running = true;
+    sessionActive = true;
+    statusText.textContent = 'Get ready…';
+    startBtn.textContent = 'Pause';
+    requestWakeLock();
+    startPhase('ready', READY_SECONDS);
+    intervalId = setInterval(tickSecond, 1000);
+  }
+
+  function pauseSession() {
+    clearInterval(intervalId);
+    intervalId = null;
+    running = false;
+    startBtn.textContent = 'Resume';
+    statusText.textContent = 'Paused';
+    releaseWakeLock();
+  }
+
+  function resumeSession() {
+    ensureAudio();
+    running = true;
+    startBtn.textContent = 'Pause';
+    statusText.textContent = phase === 'ready' ? 'Get ready…' : 'Training…';
+    requestWakeLock();
+    intervalId = setInterval(tickSecond, 1000);
+  }
+
+  function resetSession() {
+    clearInterval(intervalId);
+    intervalId = null;
+    running = false;
+    sessionActive = false;
+    setConfigDisabled(false);
+    setConfigCollapsed(false);
+    startBtn.textContent = 'Start';
+    releaseWakeLock();
+    phase = 'idle';
+    curSet = 1; curRep = 1;
+    secondsLeft = 0; phaseTotal = 0;
+    statusText.textContent = 'Ready to set up';
+    plan = null;
+    updateStaticDisplay();
+    render();
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (!sessionActive) {
+      startSession();
+    } else if (running) {
+      pauseSession();
+    } else {
+      resumeSession();
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    resetSession();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && running) requestWakeLock();
+  });
+
+  // initial paint
+  render();
+})();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {
+      /* offline caching just won't be available — app still works fine online */
+    });
+  });
+}
+</script>
+</body>
+</html>
