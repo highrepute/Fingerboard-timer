@@ -202,10 +202,23 @@
     background: var(--chalk);
     transition: transform 0.08s ease, opacity 0.15s ease, padding 0.22s ease, font-size 0.22s ease;
   }
-  body.setup-collapsed .controls button {
+  body.setup-collapsed .controls:not(.controls-secondary) button {
     font-size: 19px;
     padding: 20px 0;
     border-radius: 10px;
+  }
+  /* Mid-session helpers — deliberately smaller than Start/Reset so the primary
+     controls stay the obvious targets when glancing over mid-hang. */
+  .controls-secondary {
+    margin-top: 10px;
+  }
+  .controls-secondary button {
+    font-size: 13px;
+    padding: 11px 0;
+  }
+  body.setup-collapsed .controls-secondary button {
+    font-size: 15px;
+    padding: 13px 0;
   }
   button:active { transform: scale(0.97); }
   button.secondary {
@@ -404,6 +417,11 @@
     <button id="resetBtn" class="secondary">Reset</button>
   </div>
 
+  <div class="controls controls-secondary">
+    <button id="restartSetBtn" class="secondary">Restart set</button>
+    <button id="addSetBtn" class="secondary">+ Add set</button>
+  </div>
+
   <div class="config">
     <button type="button" class="config-title" id="configToggle" aria-expanded="true">
       <span>Session setup</span>
@@ -468,7 +486,7 @@
     </div>
   </div>
 
-  <footer>v5 · Keep screen awake while training · works offline</footer>
+  <footer>v7 · Keep screen awake while training · works offline</footer>
 </div>
 
 <script>
@@ -483,6 +501,8 @@
   const timeLeftEl = document.getElementById('timeLeft');
   const startBtn = document.getElementById('startBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const restartSetBtn = document.getElementById('restartSetBtn');
+  const addSetBtn = document.getElementById('addSetBtn');
   const statusText = document.getElementById('statusText');
   const tickToggle = document.getElementById('tickToggle');
   const soundToggle = document.getElementById('soundToggle');
@@ -787,6 +807,7 @@
     } else {
       timeLeftEl.textContent = formatDuration(sessionSecondsRemaining());
     }
+    updateSecondaryControls();
     saveState();
   }
 
@@ -1081,6 +1102,61 @@
   resetBtn.addEventListener('click', () => {
     resetSession();
   });
+
+  // Rewind to a 10s get-ready countdown before rep 1 of the current set, for when
+  // you miss the start of a set. Keeps the same set number, so nothing is lost from
+  // the session plan — you just run this set again from the top.
+  function restartCurrentSet() {
+    if (!sessionActive || !plan) return;
+    ensureAudio();
+
+    // During rest-between-sets, curSet has already advanced to the set that's
+    // coming up — so "restart the current set" would restart one you haven't done.
+    // Step back to the set you just finished instead. The exception is the final
+    // stretch of that rest: you're seconds from starting the next set anyway, so
+    // keep it and just hand back a full 10s lead-in to get on the board.
+    if (phase === 'restset' && secondsLeft > READY_SECONDS && curSet > 1) {
+      curSet -= 1;
+    }
+
+    curRep = 1;
+    // Fresh anchor: the rewound get-ready starts now, not chained from the old phase.
+    startPhase('ready', READY_SECONDS);
+    statusText.textContent = 'Get ready…';
+    if (!running) {
+      // Restarting from a paused state resumes the session, since the point is to
+      // catch the start of the set rather than sit paused at the beginning of it.
+      running = true;
+      startBtn.textContent = 'Pause';
+      requestWakeLock();
+      if (!intervalId) intervalId = setInterval(checkTimer, 250);
+    }
+    render();
+  }
+
+  // Extend the session by one set while it's running, for when you have more in
+  // the tank than you planned for. Allowed on any set, including the last.
+  function addSet() {
+    if (!sessionActive || !plan) return;
+    if (plan.sets >= 20) return; // same ceiling as the config field
+    plan.sets += 1;
+    updateStaticDisplay();
+    // Keep the config field in step, so the new total carries to the next session
+    // and is what you see when the setup panel is reopened.
+    cfgSets.value = plan.sets;
+    savePrefs();
+    render();
+  }
+
+  restartSetBtn.addEventListener('click', restartCurrentSet);
+  addSetBtn.addEventListener('click', addSet);
+
+  // These only make sense during a live session.
+  function updateSecondaryControls() {
+    const usable = sessionActive && !!plan;
+    restartSetBtn.disabled = !usable;
+    addSetBtn.disabled = !usable || plan.sets >= 20;
+  }
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
