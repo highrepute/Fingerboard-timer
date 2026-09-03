@@ -167,13 +167,18 @@
   .progress-row {
     display: flex;
     justify-content: center;
-    gap: 18px;
-    margin-top: 14px;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    margin-top: 16px;
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 13px;
+    /* Scales with the screen so long values (SET 20/20 REP 30/30 LEFT 77:50)
+       stay on one line on a normal phone, and wrap rather than overflow if not. */
+    font-size: clamp(15px, 4.4vw, 19px);
     color: var(--chalk-dim);
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
+    transition: font-size 0.22s ease;
   }
+  body.setup-collapsed .progress-row { font-size: clamp(17px, 5.2vw, 23px); }
   .progress-row b { color: var(--chalk); font-weight: 600; }
 
   /* CONTROLS */
@@ -463,7 +468,7 @@
     </div>
   </div>
 
-  <footer>v4 · Keep screen awake while training · works offline</footer>
+  <footer>v5 · Keep screen awake while training · works offline</footer>
 </div>
 
 <script>
