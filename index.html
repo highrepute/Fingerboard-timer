@@ -9,6 +9,15 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script>
+  // Applied before the page renders so a light-theme user doesn't see a dark
+  // flash on load. The main script re-applies this and wires up the toggle.
+  try {
+    if (localStorage.getItem('fingerboard-timer-theme') === 'light') {
+      document.documentElement.classList.add('light-theme');
+    }
+  } catch (e) {}
+</script>
 <style>
   @font-face {
     font-family: 'Oswald';
@@ -29,7 +38,10 @@
     --ready: #D4A72C;
     --line: #3A3024;
   }
-  body.light-theme {
+  /* Light theme lives on the root element, not body: html paints the area
+     revealed by scrolling or overscroll, so if these vars were scoped to body
+     that region would keep rendering in the dark palette. */
+  :root.light-theme {
     --bg: #F2EBDA;
     --surface: #E7DFC8;
     --surface-2: #DCD2B4;
@@ -44,10 +56,10 @@
     --ready: #9C7A16;
     --line: #CFC4A4;
   }
-  body.light-theme .state-label.hang,
-  body.light-theme .state-label.rest,
-  body.light-theme .state-label.restset,
-  body.light-theme .state-label.ready {
+  .light-theme .state-label.hang,
+  .light-theme .state-label.rest,
+  .light-theme .state-label.restset,
+  .light-theme .state-label.ready {
     color: #F2EBDA;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -128,19 +140,60 @@
   }
   body.setup-collapsed .hero { margin-top: 72px; }
   body:not(.setup-collapsed) .hero { margin-top: 18px; }
+  /* Three equal-flanked columns: the phase pill sits in the centre column and
+     stays exactly centred on screen, while the hand box occupies the right
+     flank. Because the outer columns are both 1fr, showing or hiding the hand
+     box never nudges the pill off centre. */
+  .label-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    width: 100%;
+  }
+  .label-row > .state-label:first-of-type { grid-column: 2; }
+  /* Its own box, matching the pill's height, colour and type — it shares the
+     .state-label class for exactly that reason, and only overrides its width
+     so a single letter sits in a box that never changes size. */
+  .hand-badge {
+    grid-column: 3;
+    justify-self: start;
+    margin-left: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.1em;
+    padding-left: 0;
+    padding-right: 0;
+    letter-spacing: 0;
+  }
+  .hand-badge[hidden] { display: none; }
+  /* The pill is width-locked to its longest possible label so it stops
+     resizing as the phase changes. An invisible copy of that label shares the
+     single grid cell with the live text, so the box always measures to the
+     wider of the two — which keeps it correct if the font falls back, and lets
+     it still scale with font-size between the open and collapsed states. */
   .state-label {
+    display: grid;
+    justify-items: center;
     font-family: 'Oswald', sans-serif;
     font-weight: 600;
     letter-spacing: 0.18em;
     text-transform: uppercase;
     font-size: 15px;
-    padding: 5px 16px;
+    padding: 7px 16px;
     border-radius: 3px;
     transition: background-color 0.25s ease, color 0.25s ease, font-size 0.22s ease;
     background: var(--surface-2);
     color: var(--chalk-dim);
+    max-width: 100%;
   }
-  body.setup-collapsed .state-label { font-size: 23px; padding: 8px 20px; }
+  .state-label-sizer,
+  .state-label-text {
+    grid-area: 1 / 1;
+    white-space: nowrap;
+  }
+  .state-label-sizer { visibility: hidden; }
+  body.setup-collapsed .state-label { font-size: 23px; padding: 10px 20px; }
   .state-label.hang { background: var(--hang); color: #1a0d06; }
   .state-label.rest { background: var(--rest); color: #0a1616; }
   .state-label.restset { background: var(--restset); color: #1a1608; }
@@ -361,6 +414,29 @@
     font-size: 12px;
     color: var(--chalk-dim);
   }
+  /* Three-state control (Off / L / R) — tap to cycle. Sized to match the
+     adjacent on/off toggles so the settings rows stay visually consistent. */
+  .cycle-btn {
+    flex: none;
+    min-width: 52px;
+    padding: 4px 10px;
+    border-radius: 11px;
+    background: var(--surface-2);
+    color: var(--chalk-dim);
+    border: 1px solid var(--line);
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .cycle-btn.active {
+    background: var(--hang);
+    color: var(--bg);
+    border-color: var(--hang);
+  }
+  .cycle-btn:active { transform: scale(0.95); }
   .toggle {
     position: relative;
     width: 40px; height: 22px;
@@ -403,12 +479,15 @@
   </header>
 
   <div class="hero">
-    <div class="state-label idle" id="stateLabel">READY</div>
+    <div class="label-row">
+      <div class="state-label idle" id="stateLabel"><span class="state-label-sizer" aria-hidden="true">GET READY</span><span class="state-label-text" id="stateLabelText">READY</span></div>
+      <div class="state-label hand-badge idle" id="handBadge" hidden>L</div>
+    </div>
     <div class="timer-num idle" id="timerNum">–</div>
     <div class="progress-row">
       <div>SET <b id="setNow">–</b>/<span id="setTotal">–</span></div>
       <div>REP <b id="repNow">–</b>/<span id="repTotal">–</span></div>
-      <div>LEFT <b id="timeLeft">–</b></div>
+      <div>TIME <b id="timeLeft">–</b></div>
     </div>
   </div>
 
@@ -482,29 +561,36 @@
         <span>Tick</span>
         <div class="toggle on" id="tickToggle"><div class="knob"></div></div>
       </div>
+      <div class="sound-row">
+        <span>Alternate hands</span>
+        <button type="button" class="cycle-btn" id="handToggle" aria-label="Cycle hand alternation: off, start left, start right">Off</button>
+      </div>
       </div>
     </div>
   </div>
 
-  <footer>v7 · Keep screen awake while training · works offline</footer>
+  <footer>v15 · Keep screen awake while training · works offline</footer>
 </div>
 
 <script>
 (function() {
   // ---- Elements ----
   const stateLabel = document.getElementById('stateLabel');
+  const stateLabelText = document.getElementById('stateLabelText');
   const timerNum = document.getElementById('timerNum');
   const setNow = document.getElementById('setNow');
   const setTotal = document.getElementById('setTotal');
   const repNow = document.getElementById('repNow');
   const repTotal = document.getElementById('repTotal');
   const timeLeftEl = document.getElementById('timeLeft');
+  const handBadge = document.getElementById('handBadge');
   const startBtn = document.getElementById('startBtn');
   const resetBtn = document.getElementById('resetBtn');
   const restartSetBtn = document.getElementById('restartSetBtn');
   const addSetBtn = document.getElementById('addSetBtn');
   const statusText = document.getElementById('statusText');
   const tickToggle = document.getElementById('tickToggle');
+  const handToggle = document.getElementById('handToggle');
   const soundToggle = document.getElementById('soundToggle');
 
   const cfgSets = document.getElementById('cfgSets');
@@ -550,6 +636,31 @@
     savePrefs();
   });
 
+  // Hand alternation for one-arm work: 'off', or 'L'/'R' meaning which hand set 1
+  // uses. Subsequent sets alternate from there.
+  let handStart = 'off'; // 'off' | 'L' | 'R'
+  const HAND_CYCLE = { off: 'L', L: 'R', R: 'off' };
+
+  function handForSet(setNo) {
+    if (handStart === 'off') return null;
+    // Odd sets get the starting hand, even sets the other one.
+    const startsLeft = handStart === 'L';
+    const isOddSet = setNo % 2 === 1;
+    return (isOddSet === startsLeft) ? 'L' : 'R';
+  }
+
+  function renderHandToggle() {
+    handToggle.textContent = handStart === 'off' ? 'Off' : 'Start ' + handStart;
+    handToggle.classList.toggle('active', handStart !== 'off');
+  }
+
+  handToggle.addEventListener('click', () => {
+    handStart = HAND_CYCLE[handStart];
+    renderHandToggle();
+    savePrefs();
+    render(); // badge appears/disappears immediately
+  });
+
   // Remember the last-used numbers and sound switches, so the app opens ready
   // to go rather than back at the defaults every time.
   function savePrefs() {
@@ -557,7 +668,7 @@
       localStorage.setItem(PREFS_KEY, JSON.stringify({
         sets: cfgSets.value, reps: cfgReps.value, repTime: cfgRepTime.value,
         restRep: cfgRestRep.value, restSet: cfgRestSet.value,
-        tickEnabled, soundEnabled,
+        tickEnabled, soundEnabled, handStart,
       }));
     } catch (e) {}
   }
@@ -580,17 +691,23 @@
       soundEnabled = p.soundEnabled;
       soundToggle.classList.toggle('on', soundEnabled);
     }
+    if (['off', 'L', 'R'].includes(p.handStart)) handStart = p.handStart;
+    renderHandToggle();
   }
 
   const themeToggle = document.getElementById('themeToggle');
   const THEME_KEY = 'fingerboard-timer-theme';
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 
   function applyTheme(isLight) {
-    document.body.classList.toggle('light-theme', isLight);
+    // On documentElement, not body — see the :root.light-theme note in the CSS.
+    document.documentElement.classList.toggle('light-theme', isLight);
     themeToggle.textContent = isLight ? '☀' : '☾';
+    // Keep the browser's own UI chrome in step with the palette.
+    if (themeColorMeta) themeColorMeta.setAttribute('content', isLight ? '#F2EBDA' : '#17130E');
   }
   themeToggle.addEventListener('click', () => {
-    const isLight = !document.body.classList.contains('light-theme');
+    const isLight = !document.documentElement.classList.contains('light-theme');
     applyTheme(isLight);
     try { localStorage.setItem(THEME_KEY, isLight ? 'light' : 'dark'); } catch (e) {}
   });
@@ -743,13 +860,17 @@
     let cls = 'ready';
     if (phase === 'hang') { label = 'HANG'; cls = 'hang'; }
     else if (phase === 'rest') { label = 'REST'; cls = 'rest'; }
-    else if (phase === 'restset') { label = 'REST — BETWEEN SETS'; cls = 'restset'; }
+    else if (phase === 'restset') { label = 'SET REST'; cls = 'restset'; }
     else if (phase === 'ready') { label = 'GET READY'; cls = 'ready'; }
-    else if (phase === 'done') { label = 'SESSION COMPLETE'; cls = 'hang'; }
+    else if (phase === 'done') { label = 'COMPLETE'; cls = 'hang'; }
     else { label = 'READY'; cls = 'idle'; }
     stateLabel.classList.add(cls === 'idle' ? 'idle' : cls);
     timerNum.classList.add(cls === 'idle' ? 'idle' : cls);
-    stateLabel.textContent = label;
+    // The hand box carries the same phase class so its colour tracks the pill's.
+    handBadge.className = 'state-label hand-badge ' + (cls === 'idle' ? 'idle' : cls);
+    // Write to the inner span only — setting textContent on the pill itself
+    // would delete the hidden sizer that width-locks it.
+    stateLabelText.textContent = label;
   }
 
   // Total seconds still to run in the whole session: what's left of the current
@@ -806,6 +927,16 @@
       timeLeftEl.textContent = formatDuration(plannedSessionSeconds(readConfig()));
     } else {
       timeLeftEl.textContent = formatDuration(sessionSecondsRemaining());
+    }
+    // Hand badge: shown whenever alternation is on and there's a live set to
+    // label — including the get-ready countdown, so you know which hand to set
+    // up with before the set starts. Idle previews set 1's hand.
+    if (handStart === 'off' || phase === 'done') {
+      handBadge.hidden = true;
+    } else {
+      const hand = handForSet(phase === 'idle' ? 1 : curSet);
+      handBadge.hidden = false;
+      handBadge.textContent = hand;
     }
     updateSecondaryControls();
     saveState();
