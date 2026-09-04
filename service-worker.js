@@ -1,10 +1,11 @@
-const CACHE_NAME = 'fingerboard-timer-v4';
+const CACHE_NAME = 'fingerboard-timer-v17';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './icon-maskable-512.png',
 ];
 
 self.addEventListener('install', (event) => {
