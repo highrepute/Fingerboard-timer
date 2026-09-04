@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fingerboard-timer-v17';
+const CACHE_NAME = 'fingerboard-timer-v21';
 const ASSETS = [
   './',
   './index.html',

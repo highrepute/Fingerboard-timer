@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Fingerboard Timer</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#17130E">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -87,47 +88,20 @@
   }
   header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     margin-bottom: 6px;
   }
   h1 {
-    font-family: 'Oswald', 'Arial Narrow', sans-serif;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    font-size: 19px;
     margin: 0;
-    color: var(--chalk);
-  }
-  .subtitle {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    color: var(--chalk-dim);
-    letter-spacing: 0.03em;
-  }
-  .header-right {
     display: flex;
     align-items: center;
-    gap: 10px;
   }
-  .theme-btn {
-    flex: none;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border-radius: 50%;
-    background: var(--surface-2);
-    color: var(--chalk);
-    border: 1px solid var(--line);
-    font-size: 14px;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
+  .logo {
+    height: 30px;
+    width: auto;
+    display: block;
   }
-  .theme-btn:active { transform: scale(0.92); }
 
   /* HERO */
   .hero {
@@ -265,6 +239,10 @@
   .controls-secondary {
     margin-top: 10px;
   }
+  /* Buttons the user has switched off in settings, and the row itself once
+     both are hidden — [hidden] alone loses to the flex display rule above. */
+  .controls button[hidden],
+  .controls[hidden] { display: none; }
   .controls-secondary button {
     font-size: 13px;
     padding: 11px 0;
@@ -455,11 +433,14 @@
   }
   .toggle.on .knob { left: 20px; background: var(--hang); }
 
-  footer {
+  .version {
     text-align: center;
     font-size: 10px;
-    color: var(--line);
-    margin-top: 20px;
+    color: var(--chalk-dim);
+    opacity: 0.6;
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
     letter-spacing: 0.05em;
   }
 
@@ -471,11 +452,19 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Fingerboard</h1>
-    <div class="header-right">
-      <div class="subtitle" id="statusText">Ready to set up</div>
-      <button type="button" class="theme-btn" id="themeToggle" aria-label="Toggle light/dark theme">☾</button>
-    </div>
+    <h1>
+      <!-- The app mark, drawn from theme variables rather than the PNG so it
+           works on both palettes and stays crisp at this size. -->
+      <svg class="logo" viewBox="0 0 100 78" role="img" aria-label="Fingerboard">
+        <g transform="rotate(-6 50 60.5)">
+          <rect x="14.5" y="22.5" width="15" height="38" rx="7.5" fill="var(--chalk)"/>
+          <rect x="32.3" y="18.5" width="15" height="42" rx="7.5" fill="var(--chalk)"/>
+          <rect x="50.1" y="20.5" width="15" height="40" rx="7.5" fill="var(--chalk)"/>
+          <rect x="67.9" y="26.5" width="15" height="34" rx="7.5" fill="var(--chalk)"/>
+        </g>
+        <rect x="7" y="53.5" width="86" height="17" rx="4.5" fill="var(--hang)"/>
+      </svg>
+    </h1>
   </header>
 
   <div class="hero">
@@ -521,7 +510,7 @@
           </div>
         </div>
         <div class="field">
-          <label>Reps per set</label>
+          <label>Reps</label>
           <div class="stepper">
             <button type="button" data-step="-1" data-target="cfgReps" aria-label="Decrease reps">−</button>
             <input type="number" id="cfgReps" value="6" min="1" max="30" inputmode="numeric">
@@ -537,7 +526,7 @@
           </div>
         </div>
         <div class="field">
-          <label>Rest between reps <span class="field-unit">sec</span></label>
+          <label>Rep rest <span class="field-unit">sec</span></label>
           <div class="stepper">
             <button type="button" data-step="-1" data-target="cfgRestRep" aria-label="Decrease rest between reps">−</button>
             <input type="number" id="cfgRestRep" value="3" min="0" max="300" inputmode="numeric">
@@ -545,7 +534,7 @@
           </div>
         </div>
         <div class="field" style="grid-column: 1 / -1;">
-          <label>Rest between sets <span class="field-unit">sec</span></label>
+          <label>Set rest <span class="field-unit">sec</span></label>
           <div class="stepper">
             <button type="button" data-step="-5" data-target="cfgRestSet" aria-label="Decrease rest between sets">−</button>
             <input type="number" id="cfgRestSet" value="180" min="0" max="1800" inputmode="numeric">
@@ -565,11 +554,22 @@
         <span>Alternate hands</span>
         <button type="button" class="cycle-btn" id="handToggle" aria-label="Cycle hand alternation: off, start left, start right">Off</button>
       </div>
+      <div class="sound-row">
+        <span>Restart set button</span>
+        <div class="toggle on" id="showRestartToggle"><div class="knob"></div></div>
+      </div>
+      <div class="sound-row">
+        <span>Add set button</span>
+        <div class="toggle on" id="showAddToggle"><div class="knob"></div></div>
+      </div>
+      <div class="sound-row">
+        <span>Theme</span>
+        <button type="button" class="cycle-btn" id="themeToggle" aria-label="Toggle light or dark theme">Dark</button>
+      </div>
+      <div class="version">v21 · works offline · keep screen awake while training</div>
       </div>
     </div>
   </div>
-
-  <footer>v17 · Keep screen awake while training · works offline</footer>
 </div>
 
 <script>
@@ -588,9 +588,11 @@
   const resetBtn = document.getElementById('resetBtn');
   const restartSetBtn = document.getElementById('restartSetBtn');
   const addSetBtn = document.getElementById('addSetBtn');
-  const statusText = document.getElementById('statusText');
   const tickToggle = document.getElementById('tickToggle');
   const handToggle = document.getElementById('handToggle');
+  const showRestartToggle = document.getElementById('showRestartToggle');
+  const showAddToggle = document.getElementById('showAddToggle');
+  const secondaryRow = document.querySelector('.controls-secondary');
   const soundToggle = document.getElementById('soundToggle');
 
   const cfgSets = document.getElementById('cfgSets');
@@ -668,7 +670,7 @@
       localStorage.setItem(PREFS_KEY, JSON.stringify({
         sets: cfgSets.value, reps: cfgReps.value, repTime: cfgRepTime.value,
         restRep: cfgRestRep.value, restSet: cfgRestSet.value,
-        tickEnabled, soundEnabled, handStart,
+        tickEnabled, soundEnabled, handStart, showRestartSet, showAddSet,
       }));
     } catch (e) {}
   }
@@ -693,7 +695,41 @@
     }
     if (['off', 'L', 'R'].includes(p.handStart)) handStart = p.handStart;
     renderHandToggle();
+    if (typeof p.showRestartSet === 'boolean') {
+      showRestartSet = p.showRestartSet;
+      showRestartToggle.classList.toggle('on', showRestartSet);
+    }
+    if (typeof p.showAddSet === 'boolean') {
+      showAddSet = p.showAddSet;
+      showAddToggle.classList.toggle('on', showAddSet);
+    }
+    applyControlVisibility();
   }
+
+  // Whether the two mid-session helper buttons are shown at all. Some people
+  // never use them, and hiding both drops the whole row.
+  let showRestartSet = true;
+  let showAddSet = true;
+
+  function applyControlVisibility() {
+    restartSetBtn.hidden = !showRestartSet;
+    addSetBtn.hidden = !showAddSet;
+    secondaryRow.hidden = !showRestartSet && !showAddSet;
+  }
+
+  showRestartToggle.addEventListener('click', () => {
+    showRestartSet = !showRestartSet;
+    showRestartToggle.classList.toggle('on', showRestartSet);
+    applyControlVisibility();
+    savePrefs();
+  });
+
+  showAddToggle.addEventListener('click', () => {
+    showAddSet = !showAddSet;
+    showAddToggle.classList.toggle('on', showAddSet);
+    applyControlVisibility();
+    savePrefs();
+  });
 
   const themeToggle = document.getElementById('themeToggle');
   const THEME_KEY = 'fingerboard-timer-theme';
@@ -702,7 +738,8 @@
   function applyTheme(isLight) {
     // On documentElement, not body — see the :root.light-theme note in the CSS.
     document.documentElement.classList.toggle('light-theme', isLight);
-    themeToggle.textContent = isLight ? '☀' : '☾';
+    themeToggle.textContent = isLight ? 'Light' : 'Dark';
+    themeToggle.classList.toggle('active', isLight);
     // Keep the browser's own UI chrome in step with the palette.
     if (themeColorMeta) themeColorMeta.setAttribute('content', isLight ? '#F2EBDA' : '#17130E');
   }
@@ -990,7 +1027,6 @@
     if (phase === 'ready') {
       if (!suppressSound) playRepStart();
       startPhase('hang', plan.repTime, nextAnchor);
-      statusText.textContent = 'Training…';
       return;
     }
     if (phase === 'hang') {
@@ -1047,7 +1083,6 @@
     phaseTotal = 0;
     if (!suppressSound) playAllDone();
     render();
-    statusText.textContent = 'Nice work';
     startBtn.textContent = 'Start';
     releaseWakeLock();
     clearSavedState();
@@ -1069,7 +1104,6 @@
     curRep = 1;
     running = true;
     sessionActive = true;
-    statusText.textContent = 'Get ready…';
     startBtn.textContent = 'Pause';
     requestWakeLock();
     startPhase('ready', READY_SECONDS);
@@ -1084,7 +1118,6 @@
     // paused interval doesn't count against the phase.
     pausedRemainingMs = Math.max(0, phaseTotal * 1000 - (Date.now() - phaseStartedAt));
     startBtn.textContent = 'Resume';
-    statusText.textContent = 'Paused';
     releaseWakeLock();
     saveState();
   }
@@ -1095,7 +1128,6 @@
     phaseStartedAt = Date.now() - (phaseTotal * 1000 - pausedRemainingMs);
     secondsLeft = computeSecondsLeft();
     startBtn.textContent = 'Pause';
-    statusText.textContent = phase === 'ready' ? 'Get ready…' : 'Training…';
     requestWakeLock();
     intervalId = setInterval(checkTimer, 250);
     render();
@@ -1113,7 +1145,6 @@
     phase = 'idle';
     curSet = 1; curRep = 1;
     secondsLeft = 0; phaseTotal = 0;
-    statusText.textContent = 'Ready to set up';
     plan = null;
     updateStaticDisplay();
     render();
@@ -1183,7 +1214,6 @@
       secondsLeft = computeSecondsLeft();
       running = false;
       startBtn.textContent = 'Resume';
-      statusText.textContent = 'Paused';
       render();
       return;
     }
@@ -1214,7 +1244,6 @@
 
     secondsLeft = computeSecondsLeft();
     startBtn.textContent = 'Pause';
-    statusText.textContent = phase === 'ready' ? 'Get ready…' : 'Training…';
     requestWakeLock();
     intervalId = setInterval(checkTimer, 250);
     render();
@@ -1253,7 +1282,6 @@
     curRep = 1;
     // Fresh anchor: the rewound get-ready starts now, not chained from the old phase.
     startPhase('ready', READY_SECONDS);
-    statusText.textContent = 'Get ready…';
     if (!running) {
       // Restarting from a paused state resumes the session, since the point is to
       // catch the start of the set rather than sit paused at the beginning of it.
