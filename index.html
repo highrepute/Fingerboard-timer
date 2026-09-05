@@ -608,7 +608,7 @@
         <span>Theme</span>
         <button type="button" class="cycle-btn" id="themeToggle" aria-label="Toggle light or dark theme">Dark</button>
       </div>
-      <div class="version">v24 · works offline · keep screen awake while training</div>
+      <div class="version">v25 · works offline · keep screen awake while training</div>
       </div>
     </div>
   </div>
@@ -1219,6 +1219,7 @@
     startBtn.textContent = 'Start';
     releaseWakeLock();
     clearSavedState();
+    applyUpdateIfIdle();
   }
 
   function setConfigCollapsed(collapsed) {
@@ -1282,6 +1283,7 @@
     updateStaticDisplay();
     render();
     clearSavedState();
+    applyUpdateIfIdle();
   }
 
   // ---- Persistence: survive backgrounding, tab discard, or a full reload ----
@@ -1457,6 +1459,25 @@
     }
   });
 
+  // A newer deploy may land after we've already rendered from cache. Reload to
+  // pick it up — but never mid-session, or the timer would restart under you;
+  // in that case it waits until the session is reset or finishes.
+  let reloadPending = false;
+  function applyUpdateIfIdle() {
+    if (!reloadPending) return;
+    if (sessionActive) return;
+    reloadPending = false;
+    location.reload();
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'app-updated') {
+        reloadPending = true;
+        applyUpdateIfIdle();
+      }
+    });
+  }
+
   // initial paint
   loadPrefs();
   loadPresets();
@@ -1467,9 +1488,13 @@
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('service-worker.js').catch(() => {
-      /* offline caching just won't be available — app still works fine online */
-    });
+    // updateViaCache: 'none' stops the browser serving this script from its own
+    // HTTP cache, which can otherwise keep an old worker alive for hours.
+    navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' })
+      .then((reg) => reg.update().catch(() => {}))
+      .catch(() => {
+        /* offline caching just won't be available — app still works fine online */
+      });
   });
 }
 </script>

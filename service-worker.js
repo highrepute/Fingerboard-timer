@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fingerboard-timer-v24';
+const CACHE_NAME = 'fingerboard-timer-v25';
 
 // How long to wait for the network before falling back to the cached copy.
 // Keeps a slow or flaky connection from stalling the splash screen — the app
@@ -23,12 +23,14 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)));
+    await self.clients.claim();
+    // A new worker taking over means a new deploy landed — the page currently
+    // on screen was rendered by the old one, so tell it to refresh.
+    notifyClients();
+  })());
 });
 
 // Icons and the manifest never change between deploys, so serve them from cache
@@ -54,11 +56,20 @@ self.addEventListener('fetch', (event) => {
   event.respondWith((async () => {
     const cached = await caches.match(req);
 
-    const network = fetch(req).then((res) => {
+    const network = fetch(req).then(async (res) => {
       // Refresh the cache whenever the network does come back, even if we've
-      // already answered from cache by then.
+      // already answered from cache by then. If what arrived differs from what
+      // we served, tell the page so it can pick up the new version rather than
+      // sitting on a stale copy until some future launch.
       const copy = res.clone();
+      const fresh = copy.clone();
       caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => {});
+      if (cached) {
+        try {
+          const [a, b] = await Promise.all([cached.clone().text(), fresh.text()]);
+          if (a !== b) notifyClients();
+        } catch (e) { /* comparison is best-effort */ }
+      }
       return res;
     });
 
@@ -76,3 +87,8 @@ self.addEventListener('fetch', (event) => {
     return winner || cached;
   })());
 });
+
+async function notifyClients() {
+  const clients = await self.clients.matchAll({ type: 'window' });
+  clients.forEach((c) => c.postMessage({ type: 'app-updated' }));
+}
