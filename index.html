@@ -301,24 +301,65 @@
   }
   .preset-row {
     display: flex;
-    gap: 10px;
-    margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
   }
   .preset-btn {
-    flex: 1;
+    position: relative;
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
     background: var(--surface);
     color: var(--chalk-dim);
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 9px 0;
+    padding: 9px 8px;
     font-family: 'Oswald', sans-serif;
     font-weight: 600;
     font-size: 12px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .preset-btn:active { transform: scale(0.97); }
   .preset-btn:disabled { opacity: 0.35; }
+  /* The × shown on custom presets while edit mode is on. */
+  .preset-del {
+    flex: none;
+    width: 30px;
+    padding: 0;
+    background: transparent;
+    color: var(--hang);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 16px;
+    line-height: 1;
+  }
+  .preset-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .preset-action {
+    flex: 1;
+    background: transparent;
+    color: var(--chalk-dim);
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 7px 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: none;
+  }
+  .preset-action:disabled { opacity: 0.35; }
+  .preset-action.active {
+    border-style: solid;
+    border-color: var(--hang);
+    color: var(--hang);
+  }
   .field-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -496,9 +537,10 @@
       <span class="chevron" id="configChevron">▾</span>
     </button>
     <div class="config-body" id="configBody">
-      <div class="config-body-inner">      <div class="preset-row">
-        <button type="button" class="preset-btn" id="presetRepeaters">Repeaters</button>
-        <button type="button" class="preset-btn" id="presetMaxHangs">Max hangs</button>
+      <div class="config-body-inner">      <div class="preset-row" id="presetRow"></div>
+      <div class="preset-actions">
+        <button type="button" class="preset-action" id="savePresetBtn">Save current</button>
+        <button type="button" class="preset-action" id="editPresetsBtn" hidden>Edit</button>
       </div>
       <div class="field-grid">
         <div class="field">
@@ -566,7 +608,7 @@
         <span>Theme</span>
         <button type="button" class="cycle-btn" id="themeToggle" aria-label="Toggle light or dark theme">Dark</button>
       </div>
-      <div class="version">v23 · works offline · keep screen awake while training</div>
+      <div class="version">v24 · works offline · keep screen awake while training</div>
       </div>
     </div>
   </div>
@@ -601,12 +643,23 @@
   const cfgRestRep = document.getElementById('cfgRestRep');
   const cfgRestSet = document.getElementById('cfgRestSet');
   const configInputs = [cfgSets, cfgReps, cfgRepTime, cfgRestRep, cfgRestSet];
-  const presetButtons = [
-    document.getElementById('presetRepeaters'),
-    document.getElementById('presetMaxHangs'),
-  ];
+  const presetRow = document.getElementById('presetRow');
+  const savePresetBtn = document.getElementById('savePresetBtn');
+  const editPresetsBtn = document.getElementById('editPresetsBtn');
 
   const PREFS_KEY = 'fingerboard-timer-prefs';
+  const PRESETS_KEY = 'fingerboard-timer-presets';
+  const MAX_CUSTOM_PRESETS = 8;
+
+  // Repeaters and Max hangs are fixed, so there's always a sane starting point
+  // even if the custom list is empty or gets cleared.
+  const BUILTIN_PRESETS = [
+    { name: 'Repeaters', sets: 4, reps: 6, repTime: 7, restRep: 3, restSet: 180, handStart: 'off' },
+    { name: 'Max hangs', sets: 5, reps: 1, repTime: 10, restRep: 0, restSet: 180, handStart: 'off' },
+  ];
+  let customPresets = [];
+  let editingPresets = false;
+  let configLocked = false; // true while a session owns the settings
 
   function applyPreset(values) {
     cfgSets.value = values.sets;
@@ -614,14 +667,91 @@
     cfgRepTime.value = values.repTime;
     cfgRestRep.value = values.restRep;
     cfgRestSet.value = values.restSet;
+    // Starting hand is part of a one-arm protocol, so presets carry it too.
+    if (['off', 'L', 'R'].includes(values.handStart)) {
+      handStart = values.handStart;
+      renderHandToggle();
+    }
     savePrefs();
     if (!sessionActive) render(); // refresh the idle time-remaining preview
   }
-  document.getElementById('presetRepeaters').addEventListener('click', () => {
-    applyPreset({ sets: 4, reps: 6, repTime: 7, restRep: 3, restSet: 180 });
+
+  function loadPresets() {
+    try {
+      const raw = localStorage.getItem(PRESETS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      customPresets = parsed.filter(isValidPreset).slice(0, MAX_CUSTOM_PRESETS);
+    } catch (e) { /* corrupt or unavailable — carry on with the built-ins */ }
+  }
+  function isValidPreset(p) {
+    const pos = (v) => Number.isFinite(v) && v > 0;
+    const nonNeg = (v) => Number.isFinite(v) && v >= 0;
+    return p && typeof p.name === 'string' && p.name.trim()
+      && pos(p.sets) && pos(p.reps) && pos(p.repTime)
+      && nonNeg(p.restRep) && nonNeg(p.restSet);
+  }
+  function savePresets() {
+    try { localStorage.setItem(PRESETS_KEY, JSON.stringify(customPresets)); } catch (e) {}
+  }
+
+  function renderPresets() {
+    presetRow.innerHTML = '';
+    const all = BUILTIN_PRESETS.concat(customPresets);
+    all.forEach((p, i) => {
+      const isCustom = i >= BUILTIN_PRESETS.length;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'preset-btn';
+      btn.textContent = p.name;
+      btn.title = p.name;
+      btn.disabled = configLocked;
+      btn.addEventListener('click', () => applyPreset(p));
+      presetRow.appendChild(btn);
+
+      // Deleting is behind an explicit edit mode rather than a long-press, so
+      // it's discoverable and can't be triggered by accident mid-session.
+      if (isCustom && editingPresets) {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'preset-del';
+        del.textContent = '×';
+        del.setAttribute('aria-label', 'Delete preset ' + p.name);
+        del.addEventListener('click', () => {
+          customPresets.splice(i - BUILTIN_PRESETS.length, 1);
+          savePresets();
+          if (!customPresets.length) editingPresets = false;
+          renderPresets();
+        });
+        presetRow.appendChild(del);
+      }
+    });
+    editPresetsBtn.hidden = customPresets.length === 0;
+    editPresetsBtn.textContent = editingPresets ? 'Done' : 'Edit';
+    editPresetsBtn.classList.toggle('active', editingPresets);
+    savePresetBtn.disabled = configLocked || customPresets.length >= MAX_CUSTOM_PRESETS;
+    editPresetsBtn.disabled = configLocked;
+  }
+
+  savePresetBtn.addEventListener('click', () => {
+    if (customPresets.length >= MAX_CUSTOM_PRESETS) return;
+    const cfg = readConfig();
+    const suggested = cfg.sets + '×' + cfg.reps + ' ' + cfg.repTime + 's';
+    const name = (prompt('Name this preset', suggested) || '').trim();
+    if (!name) return;
+    const preset = { name: name.slice(0, 24), ...cfg, handStart };
+    // Re-saving under an existing name overwrites it rather than duplicating.
+    const existing = customPresets.findIndex((p) => p.name.toLowerCase() === preset.name.toLowerCase());
+    if (existing >= 0) customPresets[existing] = preset;
+    else customPresets.push(preset);
+    savePresets();
+    renderPresets();
   });
-  document.getElementById('presetMaxHangs').addEventListener('click', () => {
-    applyPreset({ sets: 5, reps: 1, repTime: 10, restRep: 0, restSet: 180 });
+
+  editPresetsBtn.addEventListener('click', () => {
+    editingPresets = !editingPresets;
+    renderPresets();
   });
 
   let tickEnabled = true;
@@ -882,7 +1012,10 @@
 
   function setConfigDisabled(disabled) {
     configInputs.forEach(i => i.disabled = disabled);
-    presetButtons.forEach(b => { if (b) b.disabled = disabled; });
+    // Tracked explicitly rather than read from sessionActive, because this runs
+    // before that flag is set when a session starts.
+    configLocked = disabled;
+    renderPresets();
   }
 
   function updateStaticDisplay() {
@@ -1326,6 +1459,8 @@
 
   // initial paint
   loadPrefs();
+  loadPresets();
+  renderPresets();
   restoreState();
   render();
 })();

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fingerboard-timer-v23';
+const CACHE_NAME = 'fingerboard-timer-v24';
 
 // How long to wait for the network before falling back to the cached copy.
 // Keeps a slow or flaky connection from stalling the splash screen — the app
