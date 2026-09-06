@@ -360,6 +360,63 @@
     border-color: var(--hang);
     color: var(--hang);
   }
+  /* Inline name entry, in place of a native prompt() — those look out of place
+     on mobile and are suppressed entirely by some in-app browsers. */
+  .save-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .save-row[hidden] { display: none; }
+  .save-row input {
+    flex: 1;
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--hang);
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: var(--chalk);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+  }
+  .save-row input::placeholder { color: var(--chalk-dim); opacity: 0.7; }
+  .save-row input:focus { outline: none; }
+  .save-row input:focus-visible { outline: 2px solid var(--ready); outline-offset: 1px; }
+  .save-confirm, .save-cancel {
+    flex: none;
+    border-radius: 8px;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0 12px;
+  }
+  .save-confirm {
+    background: var(--hang);
+    color: var(--bg);
+    border: none;
+  }
+  .save-confirm:disabled { opacity: 0.4; }
+  .save-cancel {
+    background: transparent;
+    color: var(--chalk-dim);
+    border: 1px solid var(--line);
+    font-size: 16px;
+    padding: 0 10px;
+  }
+  /* A delete armed for confirmation — second tap removes it. */
+  .preset-del.confirming {
+    background: var(--hang);
+    color: var(--bg);
+    border-color: var(--hang);
+    width: auto;
+    padding: 0 10px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
   .field-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -394,11 +451,6 @@
   .field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .field input:focus { outline: none; }
   .field input:focus-visible { outline: 2px solid var(--ready); outline-offset: 2px; border-radius: 3px; }
-  .field-unit {
-    font-size: 10px;
-    color: var(--chalk-dim);
-    margin-left: 4px;
-  }
   .stepper {
     display: flex;
     align-items: center;
@@ -474,6 +526,43 @@
   }
   .toggle.on .knob { left: 20px; background: var(--hang); }
 
+  /* In-app instructions, folded away behind a button in settings so newcomers
+     have something to read without cluttering the training screen. */
+  .help-panel {
+    margin-top: 4px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--chalk-dim);
+  }
+  .help-panel[hidden] { display: none; }
+  .help-panel p { margin: 0 0 10px; }
+  .help-panel p:last-child { margin-bottom: 0; }
+  .help-panel b { color: var(--chalk); font-weight: 600; }
+  .help-note {
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+  }
+  .help-quote {
+    margin: 12px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+  .help-quote blockquote {
+    margin: 0;
+    font-style: italic;
+    color: var(--chalk);
+  }
+  .help-quote figcaption {
+    margin-top: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+
   .version {
     text-align: center;
     font-size: 10px;
@@ -528,19 +617,24 @@
 
   <div class="controls controls-secondary">
     <button id="restartSetBtn" class="secondary">Restart set</button>
-    <button id="addSetBtn" class="secondary">+ Add set</button>
+    <button id="addSetBtn" class="secondary">Add set</button>
   </div>
 
   <div class="config">
     <button type="button" class="config-title" id="configToggle" aria-expanded="true">
-      <span>Session setup</span>
+      <span>Setup</span>
       <span class="chevron" id="configChevron">▾</span>
     </button>
     <div class="config-body" id="configBody">
       <div class="config-body-inner">      <div class="preset-row" id="presetRow"></div>
       <div class="preset-actions">
-        <button type="button" class="preset-action" id="savePresetBtn">Save current</button>
+        <button type="button" class="preset-action" id="savePresetBtn">Save</button>
         <button type="button" class="preset-action" id="editPresetsBtn" hidden>Edit</button>
+      </div>
+      <div class="save-row" id="saveRow" hidden>
+        <input type="text" id="presetNameInput" maxlength="24" placeholder="Preset name" autocomplete="off">
+        <button type="button" class="save-confirm" id="saveConfirmBtn">Save</button>
+        <button type="button" class="save-cancel" id="saveCancelBtn" aria-label="Cancel">×</button>
       </div>
       <div class="field-grid">
         <div class="field">
@@ -560,7 +654,7 @@
           </div>
         </div>
         <div class="field">
-          <label>Rep time <span class="field-unit">sec</span></label>
+          <label>Rep time</label>
           <div class="stepper">
             <button type="button" data-step="-1" data-target="cfgRepTime" aria-label="Decrease rep time">−</button>
             <input type="number" id="cfgRepTime" value="7" min="1" max="120" inputmode="numeric">
@@ -568,7 +662,7 @@
           </div>
         </div>
         <div class="field">
-          <label>Rep rest <span class="field-unit">sec</span></label>
+          <label>Rep rest</label>
           <div class="stepper">
             <button type="button" data-step="-1" data-target="cfgRestRep" aria-label="Decrease rest between reps">−</button>
             <input type="number" id="cfgRestRep" value="3" min="0" max="300" inputmode="numeric">
@@ -576,13 +670,17 @@
           </div>
         </div>
         <div class="field" style="grid-column: 1 / -1;">
-          <label>Set rest <span class="field-unit">sec</span></label>
+          <label>Set rest</label>
           <div class="stepper">
             <button type="button" data-step="-5" data-target="cfgRestSet" aria-label="Decrease rest between sets">−</button>
             <input type="number" id="cfgRestSet" value="180" min="0" max="1800" inputmode="numeric">
             <button type="button" data-step="5" data-target="cfgRestSet" aria-label="Increase rest between sets">+</button>
           </div>
         </div>
+      </div>
+      <div class="sound-row">
+        <span>Hand</span>
+        <button type="button" class="cycle-btn" id="handToggle" aria-label="Cycle hand alternation: off, start left, start right">Off</button>
       </div>
       <div class="sound-row">
         <span>Sound</span>
@@ -593,22 +691,55 @@
         <div class="toggle on" id="tickToggle"><div class="knob"></div></div>
       </div>
       <div class="sound-row">
-        <span>Alternate hands</span>
-        <button type="button" class="cycle-btn" id="handToggle" aria-label="Cycle hand alternation: off, start left, start right">Off</button>
-      </div>
-      <div class="sound-row">
-        <span>Restart set button</span>
+        <span>Restart set</span>
         <div class="toggle on" id="showRestartToggle"><div class="knob"></div></div>
       </div>
       <div class="sound-row">
-        <span>Add set button</span>
+        <span>Add set</span>
         <div class="toggle on" id="showAddToggle"><div class="knob"></div></div>
       </div>
       <div class="sound-row">
         <span>Theme</span>
         <button type="button" class="cycle-btn" id="themeToggle" aria-label="Toggle light or dark theme">Dark</button>
       </div>
-      <div class="version">v25 · works offline · keep screen awake while training</div>
+      <div class="sound-row">
+        <span>How it works</span>
+        <button type="button" class="cycle-btn" id="helpToggle" aria-expanded="false" aria-controls="helpPanel">Show</button>
+      </div>
+      <div class="help-panel" id="helpPanel" hidden>
+        <p><b>Setup</b> — Sets is how many sets; Reps is hangs per set. Rep time is
+        how long each hang lasts, Rep rest the gap between hangs, Set rest the
+        longer break between sets. All times in seconds.</p>
+
+        <p><b>Sounds</b> — a long tone starts and ends every hang. Ticks count the
+        last 3 seconds of a hang, a rep rest, or the opening countdown, and the
+        last 10 seconds of a set rest. Every session starts with 10 seconds to
+        get on the board.</p>
+
+        <p><b>Controls</b> — Start becomes Pause, then Resume, keeping your place.
+        Only Reset returns to the beginning. Restart set rewinds to a fresh
+        countdown if you miss the start of a set. Add set extends the session by
+        one while it's running.</p>
+
+        <p><b>Presets</b> — Repeaters and Max hangs are built in. Set your own
+        numbers and tap Save to add up to 8 more; presets remember the Hand
+        setting too. Edit reveals a × to delete one.</p>
+
+        <p><b>Hand</b> — for one-arm work. Choose which hand starts and it
+        alternates each set, showing L or R beside the phase.</p>
+
+        <p><b>Keep the app on screen.</b> Phones silence background tabs, so the
+        sounds stop if you switch away. The countdown stays correct and catches
+        up when you return, but you'll miss the cues.</p>
+
+        <p class="help-note">Warm up before you hang — fingers heal slowly.</p>
+
+        <figure class="help-quote">
+          <blockquote id="helpQuoteText"></blockquote>
+          <figcaption id="helpQuoteBy"></figcaption>
+        </figure>
+      </div>
+      <div class="version">v33 · works offline · keep screen awake while training</div>
       </div>
     </div>
   </div>
@@ -646,6 +777,10 @@
   const presetRow = document.getElementById('presetRow');
   const savePresetBtn = document.getElementById('savePresetBtn');
   const editPresetsBtn = document.getElementById('editPresetsBtn');
+  const saveRow = document.getElementById('saveRow');
+  const presetNameInput = document.getElementById('presetNameInput');
+  const saveConfirmBtn = document.getElementById('saveConfirmBtn');
+  const saveCancelBtn = document.getElementById('saveCancelBtn');
 
   const PREFS_KEY = 'fingerboard-timer-prefs';
   const PRESETS_KEY = 'fingerboard-timer-presets';
@@ -659,6 +794,7 @@
   ];
   let customPresets = [];
   let editingPresets = false;
+  let confirmingDelete = null; // index of the custom preset armed for deletion
   let configLocked = false; // true while a session owns the settings
 
   function applyPreset(values) {
@@ -711,15 +847,24 @@
       presetRow.appendChild(btn);
 
       // Deleting is behind an explicit edit mode rather than a long-press, so
-      // it's discoverable and can't be triggered by accident mid-session.
+      // it's discoverable and can't be triggered by accident mid-session. A
+      // second tap is needed to confirm, since deletion can't be undone.
       if (isCustom && editingPresets) {
+        const idx = i - BUILTIN_PRESETS.length;
         const del = document.createElement('button');
         del.type = 'button';
-        del.className = 'preset-del';
-        del.textContent = '×';
-        del.setAttribute('aria-label', 'Delete preset ' + p.name);
+        del.className = 'preset-del' + (confirmingDelete === idx ? ' confirming' : '');
+        del.textContent = confirmingDelete === idx ? 'Sure?' : '×';
+        del.setAttribute('aria-label',
+          confirmingDelete === idx ? 'Confirm delete ' + p.name : 'Delete preset ' + p.name);
         del.addEventListener('click', () => {
-          customPresets.splice(i - BUILTIN_PRESETS.length, 1);
+          if (confirmingDelete !== idx) {
+            confirmingDelete = idx; // arm it; a second tap commits
+            renderPresets();
+            return;
+          }
+          customPresets.splice(idx, 1);
+          confirmingDelete = null;
           savePresets();
           if (!customPresets.length) editingPresets = false;
           renderPresets();
@@ -730,27 +875,48 @@
     editPresetsBtn.hidden = customPresets.length === 0;
     editPresetsBtn.textContent = editingPresets ? 'Done' : 'Edit';
     editPresetsBtn.classList.toggle('active', editingPresets);
-    savePresetBtn.disabled = configLocked || customPresets.length >= MAX_CUSTOM_PRESETS;
+    savePresetBtn.disabled = configLocked || !saveRow.hidden
+      || customPresets.length >= MAX_CUSTOM_PRESETS;
     editPresetsBtn.disabled = configLocked;
   }
 
   savePresetBtn.addEventListener('click', () => {
     if (customPresets.length >= MAX_CUSTOM_PRESETS) return;
     const cfg = readConfig();
-    const suggested = cfg.sets + '×' + cfg.reps + ' ' + cfg.repTime + 's';
-    const name = (prompt('Name this preset', suggested) || '').trim();
-    if (!name) return;
-    const preset = { name: name.slice(0, 24), ...cfg, handStart };
+    presetNameInput.value = cfg.sets + '×' + cfg.reps + ' ' + cfg.repTime + 's';
+    saveRow.hidden = false;
+    savePresetBtn.disabled = true;
+    presetNameInput.focus();
+    presetNameInput.select();
+  });
+
+  function closeSaveRow() {
+    saveRow.hidden = true;
+    renderPresets(); // restores the Save button's enabled state
+  }
+
+  function commitPreset() {
+    const name = presetNameInput.value.trim();
+    if (!name) { presetNameInput.focus(); return; }
+    const preset = { name: name.slice(0, 24), ...readConfig(), handStart };
     // Re-saving under an existing name overwrites it rather than duplicating.
     const existing = customPresets.findIndex((p) => p.name.toLowerCase() === preset.name.toLowerCase());
     if (existing >= 0) customPresets[existing] = preset;
-    else customPresets.push(preset);
+    else if (customPresets.length < MAX_CUSTOM_PRESETS) customPresets.push(preset);
     savePresets();
-    renderPresets();
+    closeSaveRow();
+  }
+
+  saveConfirmBtn.addEventListener('click', commitPreset);
+  saveCancelBtn.addEventListener('click', closeSaveRow);
+  presetNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commitPreset(); }
+    else if (e.key === 'Escape') closeSaveRow();
   });
 
   editPresetsBtn.addEventListener('click', () => {
     editingPresets = !editingPresets;
+    confirmingDelete = null; // never leave a delete armed across mode changes
     renderPresets();
   });
 
@@ -782,7 +948,7 @@
   }
 
   function renderHandToggle() {
-    handToggle.textContent = handStart === 'off' ? 'Off' : 'Start ' + handStart;
+    handToggle.textContent = handStart === 'off' ? 'Off' : handStart;
     handToggle.classList.toggle('active', handStart !== 'off');
   }
 
@@ -859,6 +1025,41 @@
     showAddToggle.classList.toggle('on', showAddSet);
     applyControlVisibility();
     savePrefs();
+  });
+
+  const helpToggle = document.getElementById('helpToggle');
+  const helpPanel = document.getElementById('helpPanel');
+  const helpQuoteText = document.getElementById('helpQuoteText');
+  const helpQuoteBy = document.getElementById('helpQuoteBy');
+
+  // Short, sourced quotes — rotated so the panel isn't identical every time.
+  const QUOTES = [
+    { text: 'I don\u2019t go training, I go climbing.', by: 'Adam Ondra' },
+    { text: 'Turn your brain off and send.', by: 'Chris Sharma' },
+    { text: 'The training occurs on the route.', by: 'Chris Sharma' },
+    { text: 'Buy one item of training equipment\u2026 make it a fingerboard.', by: 'Ben Moon' },
+    { text: 'What makes you a better climber, not just a stronger climber.', by: 'Adam Ondra' },
+  ];
+  let lastQuote = -1;
+
+  function showQuote() {
+    if (QUOTES.length < 2) { lastQuote = 0; }
+    else {
+      let i = lastQuote;
+      while (i === lastQuote) i = Math.floor(Math.random() * QUOTES.length);
+      lastQuote = i;
+    }
+    helpQuoteText.textContent = '\u201C' + QUOTES[lastQuote].text + '\u201D';
+    helpQuoteBy.textContent = '\u2014 ' + QUOTES[lastQuote].by;
+  }
+
+  helpToggle.addEventListener('click', () => {
+    const showing = helpPanel.hidden;
+    if (showing) showQuote(); // a different one each time it's opened
+    helpPanel.hidden = !showing;
+    helpToggle.textContent = showing ? 'Hide' : 'Show';
+    helpToggle.classList.toggle('active', showing);
+    helpToggle.setAttribute('aria-expanded', String(showing));
   });
 
   const themeToggle = document.getElementById('themeToggle');
