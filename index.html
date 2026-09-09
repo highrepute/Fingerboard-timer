@@ -712,7 +712,7 @@
         longer break between sets. All times in seconds.</p>
 
         <p><b>Sounds</b> — a long tone starts and ends every hang. Ticks count the
-        last 3 seconds of a hang, a rep rest, or the opening countdown, and the
+        last 2 seconds of a hang, a rep rest, or the opening countdown, and the
         last 10 seconds of a set rest. Every session starts with 10 seconds to
         get on the board.</p>
 
@@ -739,7 +739,7 @@
           <figcaption id="helpQuoteBy"></figcaption>
         </figure>
       </div>
-      <div class="version">v33 · works offline · keep screen awake while training</div>
+      <div class="version">v34 · works offline · keep screen awake while training</div>
       </div>
     </div>
   </div>
@@ -1337,9 +1337,10 @@
     if (remaining > 0) {
       if (remaining !== secondsLeft) {
         secondsLeft = remaining;
-        if ((phase === 'hang' || phase === 'rest') && secondsLeft <= 3) playTick();
+        // Two ticks then the phase-change tone: tick, tick, beep.
+        if ((phase === 'hang' || phase === 'rest') && secondsLeft <= 2) playTick();
         else if (phase === 'restset' && secondsLeft <= 10) playTick();
-        else if (phase === 'ready' && secondsLeft <= 3) playTick();
+        else if (phase === 'ready' && secondsLeft <= 2) playTick();
         render();
       }
       return;

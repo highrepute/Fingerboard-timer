@@ -44,7 +44,7 @@ making the countdown larger.
 Every session opens with a 10-second get-ready countdown.
 
 **Sounds.** A long tone marks the start and end of each hang. Ticks count the last
-3 seconds of a hang, rep rest, or the get-ready countdown, and the last 10 seconds
+2 seconds of a hang, rep rest, or the get-ready countdown, and the last 10 seconds
 of a set rest. Both can be switched off.
 
 **Start** becomes **Pause**, then **Resume** — it keeps your place. **Reset** is the
