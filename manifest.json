@@ -1,4 +1,6 @@
 {
+  "id": "/Fingerboard-timer/index.html",
+  "scope": "/Fingerboard-timer/",
   "name": "Fingerboard Timer",
   "short_name": "Fingerboard",
   "start_url": "./index.html",
