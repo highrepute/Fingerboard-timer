@@ -18,6 +18,30 @@
       document.documentElement.classList.add('light-theme');
     }
   } catch (e) {}
+
+  // The installed app opens on Android's splash screen: the icon, centred on
+  // the background colour. Hiding the header mark and the body content here —
+  // before anything paints — lets the main script fly the mark down from that
+  // position, so the app reads as a continuation of the splash rather than a
+  // cut. Add ?launch to the URL to preview it in an ordinary browser tab.
+  try {
+    // Cheap checks first: a matchMedia that is missing or throws must not take
+    // the whole thing down with it.
+    var fromSplash = /[?&]launch\b/.test(location.search)
+      || window.navigator.standalone === true;
+    var reduced = false;
+    try {
+      if (!fromSplash) fromSplash = matchMedia('(display-mode: standalone)').matches;
+      reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch (e) {}
+    if (fromSplash && !reduced) {
+      document.documentElement.classList.add('launching');
+      // Failsafe: never leave the app blank if the main script doesn't run.
+      setTimeout(function () {
+        document.documentElement.classList.remove('launching');
+      }, 2000);
+    }
+  } catch (e) {}
 </script>
 <style>
   @font-face {
@@ -102,6 +126,21 @@
     width: auto;
     display: block;
   }
+  /* Launch sequence. .launching is set before first paint, so the mark and the
+     body never appear in place first; the script clears it once it has put the
+     mark where the splash icon was. */
+  .launching .logo { visibility: hidden; }
+  .launching .wrap > :not(header) { opacity: 0; }
+  .wrap > :not(header) { transition: opacity 340ms ease-out; }
+  .logo.flying {
+    position: relative;
+    z-index: 10;
+    pointer-events: none;
+    transform-origin: 50% 50%;
+    will-change: transform;
+  }
+  /* The scaled mark would otherwise extend the scrollable area mid-flight. */
+  .launch-flying, .launch-flying body { overflow: hidden; }
 
   /* HERO */
   .hero {
@@ -732,7 +771,7 @@
           <figcaption id="helpQuoteBy"></figcaption>
         </figure>
       </div>
-      <div class="version">v40 · works offline · keep screen awake while training</div>
+      <div class="version">v41 · works offline · keep screen awake while training</div>
       </div>
     </div>
   </div>
@@ -1673,12 +1712,54 @@
     });
   }
 
+  // Fly the header mark down from the middle of the screen, where Android drew
+  // the splash icon, so launching the installed app is one continuous motion.
+  function runLaunchSequence() {
+    const root = document.documentElement;
+    const reveal = () => root.classList.remove('launching');
+    if (!root.classList.contains('launching')) return;
+
+    // Reopening mid-session: show the countdown at once. A mark sweeping across
+    // the timer is the last thing you want while you're hanging.
+    if (sessionActive) { reveal(); return; }
+
+    const logo = document.querySelector('.logo');
+    const box = logo && logo.getBoundingClientRect();
+    if (!box || !box.width || !box.height) { reveal(); return; } // no layout
+
+    // Roughly the size Android draws the splash icon, capped for big screens.
+    const splashWidth = Math.min(window.innerWidth * 0.46, 220);
+    const scale = Math.max(1, splashWidth / box.width);
+    const dx = (window.innerWidth / 2) - (box.left + box.width / 2);
+    const dy = (window.innerHeight / 2) - (box.top + box.height / 2);
+
+    root.classList.add('launch-flying');
+    logo.classList.add('flying');
+    logo.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+    reveal();                     // mark appears already big and centred, and
+                                  // the rest of the app starts fading up
+    logo.getBoundingClientRect(); // commit that as the transition's start point
+
+    logo.style.transition = 'transform 640ms cubic-bezier(0.22, 0.61, 0.36, 1)';
+    logo.style.transform = '';
+
+    const settle = () => {
+      logo.classList.remove('flying');
+      logo.style.transition = '';
+      logo.style.transform = '';
+      root.classList.remove('launch-flying');
+    };
+    logo.addEventListener('transitionend', settle, { once: true });
+    setTimeout(settle, 1200); // if transitionend never arrives
+  }
+
   // initial paint
   loadPrefs();
   loadPresets();
   renderPresets();
   restoreState();
   render();
+  runLaunchSequence();
 })();
 
 if ('serviceWorker' in navigator) {
